@@ -1,12 +1,14 @@
 """
-Boss Agent - CLI Entry Point
+Boss Agent - CLI Entry Point (v0.2)
 
 Usage:
-  python -m boss_agent "你的任务描述"
+  python -m boss_agent "your task description"
+  python -m boss_agent --llm   # use LLM-powered decomposition
 
-Example:
-  python -m boss_agent "echo hello world"
-  python -m boss_agent "echo step1, 然后 echo step2"
+Environment variables:
+  BOSS_LLM_API_KEY   - API key for LLM provider (required for LLM mode)
+  BOSS_LLM_BASE_URL   - Base URL for LLM provider (default: OpenAI API)
+  BOSS_LLM_MODEL    - Model name (default: gpt-4o1-mini)
 """
 
 import sys
@@ -17,35 +19,60 @@ if sys.platform == "win32":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from boss_agent.decomposer import decompose, AgentType
+from boss_agent.llm_decomposer import decompose_with_llm
+from boss_agent.llm_client import LLMClient, LLMConfig
 from boss_agent.executor import BossEngine
+
+
+def _get_llm_config():
+    import os
+    api_key = os.environ.get("BOSS_LLM_API_KEY", "")
+    if not api_key:
+        return None
+    base_url = os.environ.get("BOSS_LLM_BASE_URL", "https://api.openai.com/v1")
+    model = os.environ.get("BOSS_LLM_MODEL", "gpt-4.1-mini")
+    return LLMConfig(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+    )
 
 
 def main():
     if len(sys.argv) < 2:
-        print("Boss Agent v0.1.0")
+        print("Boss Agent v0.2.0")
         print()
         print("Usage:")
         print('  python -m boss_agent "your task description"')
         print()
-        print("Examples:")
-        print('  python -m boss_agent "echo hello world"')
-        print('  python -m boss_agent "echo step1, then echo step2"')
-        print('  python -m boss_agent "dir, then echo done"')
+        print("Environment variables for LLM mode:")
+        print("  BOSS_LLM_API_KEY  - API key for LLM provider")
+        print("  BOSS_LLM_BASE_URL - Base URL (default: OpenAI API)")
+        print("  BOSS_LLM_MODEL    - Model name (default: gpt-4.1-mini)")
+        print()
+        print("Without BOSS_LLM_API_KEY, runs in rule-based mode (v0.1).")
         sys.exit(0)
 
     user_input = " ".join(sys.argv[1:])
 
     print()
     print("=" * 50)
-    print("  Boss Agent v0.1.0")
+    print("  Boss Agent v0.2.0")
     print("=" * 50)
     print()
     print(f"  [Boss] Task received: {user_input}")
     print()
 
     # Step 1: Decompose
-    print("  [Boss] Decomposing task...")
-    plan = decompose(user_input)
+    llm_config = _get_llm_config()
+
+    if llm_config:
+        print("  [Boss] Decomposing (LLM mode)...")
+        client = LLMClient(llm_config)
+        plan = decompose_with_llm(user_input, client)
+    else:
+        print("  [Boss] Decomposing (rule-based mode)...")
+        plan = decompose(user_input)
 
     print(f"  [Boss] Plan: {len(plan.subtasks)} subtask(s)")
     for task in plan.subtasks:
@@ -57,8 +84,6 @@ def main():
     print("  [Boss] Executing...")
     print("-" * 50)
 
-    # Override: for v0.1, treat all tasks as shell commands
-    # (LLM-powered agents coming in v0.2)
     for task in plan.subtasks:
         task.agent = AgentType.SHELL
 
@@ -81,7 +106,6 @@ def main():
         status = "OK" if result.success else "FAIL"
         print(f"  [{result.task_id}] {status}")
         if result.output and result.output.strip():
-            # Show first 500 chars of output
             output = result.output.strip()[:500]
             for line in output.split("\n"):
                 print(f"    {line}")
@@ -89,7 +113,6 @@ def main():
             print(f"    ERROR: {result.error[:200]}")
         print()
 
-    # Final summary
     if fail_count == 0:
         print("  All tasks completed successfully.")
     else:
