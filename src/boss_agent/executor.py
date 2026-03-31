@@ -1,14 +1,18 @@
-"""
-Boss Agent - 执行引擎
+"""Boss Agent - Execution Engine
 
-核心职责：接收拆解好的子任务，分派给对应的最强智能体执行。
-刘邦用人之道：每个领域派最强的人去干。
+Core responsibility: receive decomposed subtasks, dispatch to the best agent.
+
+Liu Bang's philosophy: send the strongest person for each domain.
 """
 
 from __future__ import annotations
 
+import json
 import subprocess
 import shutil
+import urllib.request
+import urllib.parse
+import urllib.error
 import os
 import sys
 from dataclasses import dataclass
@@ -19,7 +23,6 @@ from .decomposer import SubTask, AgentType
 
 @dataclass
 class ExecutionResult:
-    """执行结果"""
     task_id: str
     success: bool
     output: str
@@ -28,13 +31,12 @@ class ExecutionResult:
 
 
 class ShellExecutor:
-    """Shell 命令执行器——最基础的执行能力"""
-    
+    """Shell command executor - the most basic execution capability."""
+
     def can_handle(self, task: SubTask) -> bool:
         return task.agent == AgentType.SHELL
-    
+
     def execute(self, task: SubTask, context: dict | None = None) -> ExecutionResult:
-        """执行 shell 命令"""
         try:
             result = subprocess.run(
                 task.description,
@@ -68,25 +70,21 @@ class ShellExecutor:
 
 
 class ClaudeCodeExecutor:
+    """Claude Code executor - the coding specialist.
+
+    Uses `claude --print` for coding tasks.
     """
-    Claude Code 执行器——Boss 手下的韩信
-    
-    编码领域的最强智能体。Boss 只需要说"干什么"，
-    Claude Code 自己知道"怎么干"。
-    """
-    
+
     def __init__(self):
         self.claude_path = shutil.which("claude")
-    
+
     def is_available(self) -> bool:
-        """检查 Claude Code 是否已安装"""
         return self.claude_path is not None
-    
+
     def can_handle(self, task: SubTask) -> bool:
         return task.agent == AgentType.CODER
-    
+
     def execute(self, task: SubTask, context: dict | None = None) -> ExecutionResult:
-        """调用 Claude Code 执行编码任务"""
         if not self.is_available():
             return ExecutionResult(
                 task_id=task.id,
@@ -94,8 +92,7 @@ class ClaudeCodeExecutor:
                 output="",
                 error="Claude Code not installed. Install: https://docs.anthropic.com/en/docs/claude-code",
             )
-        
-        # 构建上下文提示
+
         prompt = task.description
         if context:
             prev_results = []
@@ -104,13 +101,13 @@ class ClaudeCodeExecutor:
                     prev_results.append(f"[{dep_id} result]:\n{context[dep_id]}")
             if prev_results:
                 prompt = f"Previous task results:\n{''.join(prev_results)}\n\nNow do: {task.description}"
-        
+
         try:
             result = subprocess.run(
                 [self.claude_path, "--print", prompt],
                 capture_output=True,
                 text=True,
-                timeout=300,  # 编码任务给 5 分钟
+                timeout=300,
                 encoding="utf-8",
                 errors="replace",
             )
@@ -137,40 +134,141 @@ class ClaudeCodeExecutor:
 
 
 class ResearchExecutor:
+    """Research executor - web search via DuckDuckGo Instant Answer API.
+
+    No API key required. Uses DuckDuckGo's free instant answer endpoint.
     """
-    调研执行器——用 web search 做调研
-    
-    v0.1: 简单实现，输出提示信息
-    v0.2: 接入真实 web search API
-    """
-    
+
     def can_handle(self, task: SubTask) -> bool:
         return task.agent == AgentType.RESEARCHER
-    
+
     def execute(self, task: SubTask, context: dict | None = None) -> ExecutionResult:
-        # v0.1: 占位实现
+        query = task.description.strip()
+
+        # Try DuckDuckGo Instant Answer API (no key needed)
+        try:
+            results = self._search_duckduckgo(query)
+            if results:
+                return ExecutionResult(
+                    task_id=task.id,
+                    success=True,
+                    output=results,
+                )
+        except Exception:
+            pass
+
+        # Fallback: try a simple web fetch
+        try:
+            results = self._search_via_fetch(query)
+            if results:
+                return ExecutionResult(
+                    task_id=task.id,
+                    success=True,
+                    output=results,
+                )
+        except Exception as e:
+            return ExecutionResult(
+                task_id=task.id,
+                success=False,
+                output="",
+                error=f"Research failed: {e}",
+            )
+
         return ExecutionResult(
             task_id=task.id,
-            success=True,
-            output=f"[Research placeholder] Task: {task.description}\n(Real web search coming in v0.2)",
+            success=False,
+            output="",
+            error="No search results found",
         )
+
+    def _search_duckduckgo(self, query: str) -> str:
+        """Search via DuckDuckGo Instant Answer API (free, no key)."""
+        params = urllib.parse.urlencode({
+            "q": query,
+            "format": "json",
+            "no_html": 1,
+            "skip_disambig": 1,
+        })
+        url = f"https://api.duckduckgo.com/?{params}"
+
+        req = urllib.request.Request(url, headers={"User-Agent": "BossAgent/0.3"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+
+        sections = []
+
+        # Abstract
+        abstract = data.get("AbstractText", "")
+        if abstract:
+            source = data.get("AbstractSource", "")
+            sections.append(f"Summary: {abstract}")
+            if source:
+                sections.append(f"Source: {source}")
+
+        # Related topics
+        related = data.get("RelatedTopics", [])
+        for i, topic in enumerate(related[:5]):
+            if isinstance(topic, dict) and "Text" in topic:
+                sections.append(f"- {topic['Text']}")
+                if topic.get("FirstURL"):
+                    sections.append(f"  Link: {topic['FirstURL']}")
+
+        # Infobox
+        infobox = data.get("Infobox", {})
+        if infobox and "content" in infobox:
+            for item in infobox["content"][:5]:
+                label = item.get("label", "")
+                value = item.get("value", "")
+                if label and value:
+                    sections.append(f"- {label}: {value}")
+
+        if not sections:
+            return ""
+
+        header = f"Research results for: {query}\n{'=' * 40}"
+        return f"{header}\n\n" + "\n".join(sections)
+
+    def _search_via_fetch(self, query: str) -> str:
+        """Fallback: fetch DuckDuckGo HTML and extract snippets."""
+        params = urllib.parse.urlencode({"q": query})
+        url = f"https://html.duckduckgo.com/html/?{params}"
+
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; BossAgent/0.3)"
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+
+        # Extract result snippets (simple regex)
+        import re
+        snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', html, re.DOTALL)
+        clean = []
+        for s in snippets[:5]:
+            text = re.sub(r"<[^>]+>", "", s).strip()
+            if text:
+                clean.append(f"- {text}")
+
+        if not clean:
+            return ""
+
+        return f"Search results for: {query}\n{'=' * 40}\n\n" + "\n".join(clean)
 
 
 class ReviewExecutor:
-    """
-    审查执行器——让 Claude Code 做 code review
-    """
-    
+    """Review executor - uses Claude Code for code review, falls back to shell."""
+
     def __init__(self):
         self._claude = ClaudeCodeExecutor()
-    
+
     def can_handle(self, task: SubTask) -> bool:
         return task.agent == AgentType.REVIEWER
-    
+
     def execute(self, task: SubTask, context: dict | None = None) -> ExecutionResult:
         if self._claude.is_available():
-            # 有 Claude Code，让它做 review
-            review_prompt = f"As a code reviewer, please review the following and provide feedback:\n\n{task.description}"
+            review_prompt = (
+                f"As a senior code reviewer, review the following and provide "
+                f"specific, actionable feedback:\n\n{task.description}"
+            )
             review_task = SubTask(
                 id=task.id,
                 description=review_prompt,
@@ -178,22 +276,22 @@ class ReviewExecutor:
                 dependencies=task.dependencies,
             )
             return self._claude.execute(review_task, context)
-        
-        # 没有 Claude Code，占位
+
+        # Fallback: use shell with a basic check
         return ExecutionResult(
             task_id=task.id,
             success=True,
-            output=f"[Review placeholder] Task: {task.description}",
+            output=f"[Review] Claude Code not available. Task: {task.description}",
         )
 
 
 class BossEngine:
+    """Boss execution engine - the dispatch hub.
+
+    Receives a TaskPlan, executes subtasks by dependency order,
+    and collects results for downstream tasks.
     """
-    Boss 执行引擎——刘邦的调度中枢
-    
-    接收 TaskPlan，按依赖顺序执行子任务，收集结果。
-    """
-    
+
     def __init__(self):
         self.executors = [
             ShellExecutor(),
@@ -201,26 +299,23 @@ class BossEngine:
             ResearchExecutor(),
             ReviewExecutor(),
         ]
-        self.context: dict[str, str] = {}  # task_id -> result
-    
+        self.context: dict[str, str] = {}
+
     def _get_executor(self, task: SubTask):
-        """找到能处理这个任务的执行器"""
+        """Find the right executor for this task."""
         for executor in self.executors:
             if executor.can_handle(task):
                 return executor
         return self.executors[0]  # fallback to shell
-    
+
     def execute_plan(self, plan) -> list[ExecutionResult]:
-        """
-        执行整个任务计划
-        
-        按依赖顺序串行执行，把每个子任务的结果传给后续任务。
-        """
+        """Execute the entire task plan in dependency order."""
         results: list[ExecutionResult] = []
         completed_ids: set[str] = set()
-        
+
         for task in plan.subtasks:
-            # 检查依赖是否完成
+            # Check dependencies
+            deps_ok = True
             for dep_id in task.dependencies:
                 if dep_id not in completed_ids:
                     results.append(ExecutionResult(
@@ -229,19 +324,20 @@ class BossEngine:
                         output="",
                         error=f"Dependency {dep_id} not completed",
                     ))
+                    deps_ok = False
                     break
-            else:
-                # 依赖都完成了，执行
-                executor = self._get_executor(task)
-                task.status = "running"
-                result = executor.execute(task, self.context)
-                task.status = "done" if result.success else "failed"
-                
-                # 记录结果到上下文
-                if result.success:
-                    self.context[task.id] = result.output
-                    completed_ids.add(task.id)
-                
-                results.append(result)
-        
+
+            if not deps_ok:
+                continue
+
+            # Execute
+            executor = self._get_executor(task)
+            result = executor.execute(task, self.context)
+
+            if result.success:
+                self.context[task.id] = result.output
+                completed_ids.add(task.id)
+
+            results.append(result)
+
         return results
