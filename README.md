@@ -6,10 +6,10 @@
 
 **An AI Agent that orchestrates other AI agents to get things done.**
 
-*Like a CEO — but but AI workers.*
+*Like a CEO — but for AI workers.*
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-blue" alt="v0.1.0" />
+  <img src="https://img.shields.io/badge/version-0.2.0-blue" alt="v0.2.0" />
   <img src="https://img.shields.io/badge/python-3.10+-green" alt="Python 3.10+" />
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License" />
 </p>
@@ -38,30 +38,29 @@ You tell Boss Agent what you want done. It decomposes your request into subtasks
 
 It's like a CEO managing a team — except this CEO never sleeps.
 
+## Demo
+
 ```bash
-$ python -m boss_agent "echo step 1, then echo step 2"
+$ python -m boss_agent "echo hello from Boss Agent"
 
-  🦞 Boss Agent v0.1.0
-  ==================================================
+==================================================
+  Boss Agent v0.2.0
+==================================================
 
-  [Boss] Task received: echo step 1, then echo step 2
+  [Boss] Task received: echo hello from Boss Agent
 
-  [Boss] Decomposing task...
-  [Boss] Plan: 2 subtask(s)
-    [T001] [shell       ] echo step 1
-    [T002] [shell       ] echo step 2 (after T001)
+  [Boss] Decomposing (rule-based mode)...
+  [Boss] Plan: 1 subtask(s)
+    [T001] [shell       ] echo hello from Boss Agent
 
   [Boss] Executing...
   --------------------------------------------------
   --------------------------------------------------
 
-  [Boss] Results: 2 ok, 0 failed (31ms)
+  [Boss] Results: 1 ok, 0 failed (24ms)
 
   [T001] OK
-    step 1
-
-  [T002] OK
-    step 2
+    hello from Boss Agent
 
   All tasks completed successfully.
 ```
@@ -73,67 +72,83 @@ $ python -m boss_agent "echo step 1, then echo step 2"
 git clone https://github.com/AIwork4me/boss-agent.git
 cd boss-agent
 
-# Single task
-python -m boss_agent "echo hello from Boss Agent"
+# Set up environment (recommended)
+uv venv
 
-# Compound task (auto-decomposed into serial subtasks)
-python -m boss_agent "echo step 1, then echo step 2"
+# Run a single task
+python -m boss_agent "echo hello from Boss Agent"
 ```
 
-*Zero config. No API keys needed for shell mode. For LLM-powered dispatch, install [Claude Code](https://docs.anthropic.com/en/docs/claude-code).*
+*Zero config. No API keys needed for shell mode.*
+
+## LLM Mode (v0.2.0)
+
+Boss Agent v0.2.0 supports **LLM-powered task decomposition**. Instead of rule-based splitting, it uses an LLM to intelligently understand and break down your request.
+
+```bash
+# Set environment variables for LLM mode
+export BOSS_LLM_API_KEY="your-api-key"
+export BOSS_LLM_BASE_URL="https://api.openai.com/v1"  # or any OpenAI-compatible API
+export BOSS_LLM_MODEL="gpt-4o-mini"
+
+# Run with LLM-powered decomposition
+python -m boss_agent "Research AI agent frameworks and write a comparison report"
+```
+
+Boss Agent will automatically use LLM mode when `BOSS_LLM_API_KEY` is set. Otherwise it falls back to rule-based mode — zero config needed.
 
 ## How It Works
 
 ```
 User says one sentence
-        ↓
+        |
+        v
 Boss decomposes into subtasks
-        ↓
+(LLM-powered or rule-based)
+        |
+        v
 Boss dispatches each subtask to the best agent
-  ┌──────────────┬──────────────┬──────────────┐
-  │   Coder      │  Researcher  │    Shell       │
-  │ Claude Code  │  Web Search  │  Any command  │
-  └──────────────┴──────────────┴──────────────┘
-        ↓
+  +--------------+--------------+--------------+
+  |   Coder      |  Researcher  |    Shell      |
+  | Claude Code  |  Web Search  |  Any command  |
+  +--------------+--------------+--------------+
+        |
+        v
 Boss collects results and delivers
 ```
 
-> **Inspired by Liu Bang** (刘邦), — Founder of the Han Dynasty: *"I don't fight battles. I find the best people to fight battles for me."* He let generals fight, strategists plan, and ministers govern — each doing what they do best.
+> **Inspired by Liu Bang** (刘邦), founder of the Han Dynasty: *"I don't fight battles. I find the best people to fight them for me."* He let generals fight, strategists plan, and ministers govern — each doing what they do best.
 
 ## Architecture
 
 ```
 boss_agent/
-├── __main__.py          # CLI entry point
-├── decomposer.py        # Task decomposition (Boss's brain)
-└── executor.py          # Agent dispatch (Boss's lieutenants)
-    ├── ShellExecutor      # Any shell command
-    ├── ClaudeCodeExecutor # Coding tasks → Claude Code
-    ├── ResearchExecutor   # Web research (v0.2)
-    └── ReviewExecutor     # Code review (v0.2)
+  __main__.py          # CLI entry point
+  decomposer.py        # Rule-based task decomposition
+  llm_decomposer.py    # LLM-powered decomposition (v0.2)
+  llm_client.py        # OpenAI-compatible API client (v0.2)
+  executor.py          # Agent dispatch
+    ShellExecutor      # Any shell command
+    ClaudeCodeExecutor # Coding tasks via Claude Code
+    ResearchExecutor   # Web research (placeholder)
+    ReviewExecutor     # Code review (placeholder)
 ```
-
-| Component | Role | Analogy |
-|-----------|------|---------|
-| `decomposer.py` | Understand & split tasks | Boss's brain |
-| `ClaudeCodeExecutor` | Execute coding tasks | Han Xin (韩信) — the general |
-| `ResearchExecutor` | Gather information | Zhang Liang (张良) — the strategist |
-| `ShellExecutor` | Run system commands | Xiao He (萧何) — the administrator |
 
 ## Current Status
 
 | Executor | Status | Description |
 |----------|--------|-------------|
 | ShellExecutor | ✅ Working | Any shell command |
-| ClaudeCodeExecutor | 🔜 v0.2 | Calls `claude --print` for coding tasks |
-| ResearchExecutor | 🔜 v0.2 | Web search integration |
-| ReviewExecutor | 🔜 v0.2 | Code review via Claude Code |
+| LLM Decomposer | ✅ Working | OpenAI-compatible, auto-fallback to rules |
+| ClaudeCodeExecutor | 🔜 v0.3 | Calls `claude --print` for coding tasks |
+| ResearchExecutor | 🔜 v0.3 | Web search integration |
+| ReviewExecutor | 🔜 v0.3 | Code review via Claude Code |
 
 ## Roadmap
 
 - [x] **v0.1** — Rule-based decomposition + Shell execution
-- [ ] **v0.2** — LLM-powered decomposition + Claude Code integration
-- [ ] **v0.3** — Web search integration + Feishu/Slack bot
+- [x] **v0.2** — LLM-powered decomposition + graceful fallback
+- [ ] **v0.3** — Claude Code integration + Web search
 - [ ] **v0.4** — Parallel execution + Memory system
 
 ## Philosophy

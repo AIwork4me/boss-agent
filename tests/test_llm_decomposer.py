@@ -1,8 +1,4 @@
-import pathlib
-
-import json
-
-content = '''"""Boss Agent - LLM Decomposer tests (v0.2)."""
+"""Boss Agent - LLM Decomposer tests (v0.2)."""
 
 import sys
 import os
@@ -48,24 +44,45 @@ def test_parse_simple_json():
     assert plan.subtasks[0].agent == AgentType.SHELL
 
 
-def test_parse_multiple_subtasks():
+def test_parse_with_1based_deps():
     _reset_counter()
     raw = json.dumps({
-        "summary": "multi step task",
+        "summary": "two steps",
         "subtasks": [
-            {"description": "search for info", "agent": "researcher", "dependencies": []},
-            {"description": "write a report", "agent": "coder", "dependencies": ["T001"]},
+            {"description": "step 1", "agent": "shell", "dependencies": []},
+            {"description": "step 2", "agent": "shell", "dependencies": [1]},
         ]
     })
-    plan = _parse_response(raw, "search and write")
+    plan = _parse_response(raw, "two steps")
     assert len(plan.subtasks) == 2
+    # Dependency [1] should be remapped to T001
+    assert plan.subtasks[0].id in plan.subtasks[1].dependencies
+    assert plan.subtasks[0].id == "T001"
+
+
+def test_parse_with_chain_deps():
+    _reset_counter()
+    raw = json.dumps({
+        "summary": "three steps",
+        "subtasks": [
+            {"description": "search info", "agent": "researcher", "dependencies": []},
+            {"description": "write code", "agent": "coder", "dependencies": [1]},
+            {"description": "review code", "agent": "reviewer", "dependencies": [2]},
+        ]
+    })
+    plan = _parse_response(raw, "three steps")
+    assert len(plan.subtasks) == 3
     assert plan.subtasks[0].agent == AgentType.RESEARCHER
     assert plan.subtasks[1].agent == AgentType.CODER
+    assert plan.subtasks[2].agent == AgentType.REVIEWER
+    # Chain: T002 depends on T001, T003 depends on T002
+    assert plan.subtasks[0].id in plan.subtasks[1].dependencies
+    assert plan.subtasks[1].id in plan.subtasks[2].dependencies
 
 
-def test_parse_markdown_fenced_json():
+def test_parse_markdown_fenced():
     _reset_counter()
-    raw = '```json\\n{"summary": "fenced", "subtasks": [{"description": "do thing", "agent": "shell", "dependencies": []}]}\\n```'
+    raw = '```json\n{"summary": "fenced", "subtasks": [{"description": "do thing", "agent": "shell", "dependencies": []}]}\n```'
     plan = _parse_response(raw, "fenced")
     assert len(plan.subtasks) == 1
     assert plan.subtasks[0].description == "do thing"
@@ -73,16 +90,16 @@ def test_parse_markdown_fenced_json():
 
 def test_parse_invalid_json_fallback():
     _reset_counter()
-    raw = "this is not json"
-    plan = _parse_response(raw, "fallback test")
-    assert len(plan.subtasks) == 1
-    assert plan.subtasks[0].description == "fallback test"
-    assert plan.subtasks[0].agent == AgentType.SHELL
+    try:
+        plan = _parse_response("this is not json", "fallback test")
+        assert False, "Should have raised exception"
+    except (json.JSONDecodeError, ValueError):
+        pass  # Expected
 
 
-def test_decompose_with_llm_success():
+def test_decompose_llm_success():
     _reset_counter()
-    mock_client = MockClient([
+    mock = MockClient([
         LLMResponse(
             content=json.dumps({
                 "summary": "single echo",
@@ -91,28 +108,24 @@ def test_decompose_with_llm_success():
             success=True,
         ),
     ])
-    plan = decompose_with_llm("echo hello", mock_client)
+    plan = decompose_with_llm("echo hello", mock)
     assert len(plan.subtasks) == 1
     assert plan.subtasks[0].description == "echo hello"
 
 
-def test_decompose_with_llm_failure_fallback():
+def test_decompose_llm_failure_fallback():
     _reset_counter()
-    mock_client = MockClient([
+    mock = MockClient([
         LLMResponse(content="", success=False, error="API error"),
     ])
-    plan = decompose_with_llm("echo hello", mock_client)
+    plan = decompose_with_llm("echo hello", mock)
     assert len(plan.subtasks) >= 1
 
 
-def test_decompose_with_llm_parse_error_fallback():
+def test_decompose_llm_parse_error_fallback():
     _reset_counter()
-    mock_client = MockClient([
+    mock = MockClient([
         LLMResponse(content="not json at all", success=True),
     ])
-    plan = decompose_with_llm("echo hello", mock_client)
+    plan = decompose_with_llm("echo hello", mock)
     assert len(plan.subtasks) >= 1
-'''
-
-pathlib.Path(r'C:\Users\Tinkerclaw\.openclaw-autoclaw\workspace\boss-agent\tests\test_llm_decomposer.py').write_text(content, encoding='utf-8')
-print("test_llm_decomposer.py generated OK")
