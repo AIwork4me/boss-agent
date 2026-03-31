@@ -18,9 +18,7 @@
   <em>Empowered by <a href="https://github.com/AIwork4me">Lobster Company</a> 🦞</em>
 </p>
 
-</div>
-
-> [🇨🇳 中文文档](README_zh-CN.md)
+[中文版](README_zh-CN.md)
 
 ---
 
@@ -28,92 +26,88 @@
 
 You already have Claude Code, Cursor, ChatGPT, Copilot, Windsurf, Perplexity...
 
-The result? **Cognitive overload.** Task switching between AI tools exhausts your prefrontal cortex. More tools = more fatigue.
+The result? **Cognitive overload.** Task switching between AI agents exhausts your prefrontal cortex. More tools = more fatigue.
 
-You don't need another tool. **You need a Boss.**
+ You don't need another tool. **You need a Boss.**
 
 ## The Solution
-
 **One agent to rule them all.**
 
 You tell Boss Agent what you want done. It decomposes your request into subtasks, dispatches each to the best AI agent for the job, collects the results, and reports back.
 
-It's like a CEO managing a team — except this CEO never sleeps.
+ It's like a CEO managing a team — except this CEO never sleeps.
 
-```bash
-$ python -m boss_agent "echo step 1, then echo step 2"
+```
+$ boss "Research GitHub trending patterns and write a report"
 
   🦞 Boss Agent v0.1.0
   ==================================================
 
-  [Boss] Task received: echo step 1, then echo step 2
+  [Boss] Task received: Research GitHub trending patterns and write a report
 
   [Boss] Decomposing task...
   [Boss] Plan: 2 subtask(s)
-    [T001] [shell       ] echo step 1
-    [T002] [shell       ] echo step 2 (after T001)
+    [T001] [researcher  ] Research GitHub trending patterns
+    [T002] [coder      ] Write a report (after T001)
 
   [Boss] Executing...
   --------------------------------------------------
   --------------------------------------------------
 
-  [Boss] Results: 2 ok, 0 failed (30ms)
+  [Boss] Results: 2 ok, 0 failed (12ms)
 
   [T001] OK
-    step 1
+    [report.md saved to ./output]
   [T002] OK
-    step 2
+    Report complete.
 
   All tasks completed successfully.
 ```
 
-## Quick Start
+*Like a CEO, Boss Agent doesn't do the work — it dispatches the right agent for the job.*
 
+## Quick Start
 ```bash
-# Clone and run (Python 3.10+)
+# Clone and run
 git clone https://github.com/AIwork4me/boss-agent.git
 cd boss-agent
 
-# Single task
+# Run with Python (3.10+)
 python -m boss_agent "echo hello from Boss Agent"
 
-# Compound task (auto-decomposed into serial subtasks)
+# Run a compound task
 python -m boss_agent "echo step 1, then echo step 2"
 ```
 
-*Zero config. No API keys needed for shell mode. For LLM-powered dispatch, install [Claude Code](https://docs.anthropic.com/en/docs/claude-code).*
+*Zero config. No API keys needed for the basic mode. For LLM-powered dispatch, install [Claude Code](https://docs.anthropic.com/en/docs/claude-code).*
 
 ## How It Works
-
 ```
 User says one sentence
-        ↓
+       ↓
 Boss decomposes into subtasks
-        ↓
+       ↓
 Boss dispatches each subtask to the best agent
   ┌──────────────┬──────────────┬──────────────┐
-  │   Coder      │  Researcher  │    Shell      │
-  │ Claude Code  │  Web Search  │  Any command  │
+  │  Coder       │  Researcher  │  Shell        │
+  │  Claude Code │  Web Search  │  Any command │
   └──────────────┴──────────────┴──────────────┘
-        ↓
+       ↓
 Boss collects results and delivers
 ```
-
-> **Inspired by Liu Bang** (刘邦), founder of the Han Dynasty: *"I don't fight battles. I find the best people to fight battles for me."* He let generals fight, strategists plan, and ministers govern — each doing what they do best.
+> **Inspired by Liu Bang** (刘邦): "I don't fight battles. I find the best people to fight battles for me." — The founder of the Han Dynasty, who let generals, strategists, and and and govern — each doing what they do best.
 
 ## Architecture
-
 ```
 boss_agent/
-├── __main__.py          # CLI entry point
-├── decomposer.py        # Task decomposition (Boss's brain)
-└── executor.py          # Agent dispatch (Boss's lieutenants)
+├── __main__.py    # CLI entry point
+├── decomposer.py  # Task decomposition (Boss's brain)
+└── executor.py    # Agent dispatch (Boss's lieutenants)
     ├── ShellExecutor      # Any shell command
     ├── ClaudeCodeExecutor # Coding tasks → Claude Code
     ├── ResearchExecutor   # Web research (v0.2)
     └── ReviewExecutor     # Code review (v0.2)
 ```
-
 | Component | Role | Analogy |
 |-----------|------|---------|
 | `decomposer.py` | Understand & split tasks | Boss's brain |
@@ -122,14 +116,12 @@ boss_agent/
 | `ShellExecutor` | Run system commands | Xiao He (萧何) — the administrator |
 
 ## Roadmap
-
 - [x] **v0.1** — Rule-based decomposition + Shell execution
 - [ ] **v0.2** — LLM-powered decomposition + Claude Code integration
 - [ ] **v0.3** — Web search integration + Feishu/Slack bot
 - [ ] **v0.4** — Parallel execution + Memory system
 
 ## Philosophy
-
 Built by [Lobster Company](https://github.com/AIwork4me/lobster-company), guided by:
 
 - **Seek Truth from Facts** — Verify with real users, not assumptions
@@ -137,9 +129,7 @@ Built by [Lobster Company](https://github.com/AIwork4me/lobster-company), guided
 - **Independence** — Core orchestration logic must be self-owned
 
 ## Contributing
-
 PRs welcome! See [CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 ## License
-
 [MIT](LICENSE)
