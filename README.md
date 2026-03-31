@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <em>Empowered by <a href="https://github.com/AIwork4me">Lobster Company</a> 🦞</em>
+  <em>Built by <a href="https://github.com/AIwork4me">Lobster Company</a> 🦞</em>
 </p>
 
 [中文版](README_zh-CN.md)
@@ -68,18 +68,22 @@ $ python -m boss_agent "echo hello from Boss Agent"
 ## Quick Start
 
 ```bash
-# Clone and run (Python 3.10+)
+# Clone the repo (requires Python 3.10+)
 git clone https://github.com/AIwork4me/boss-agent.git
 cd boss-agent
 
-# Set up environment (recommended)
-uv venv
+# Install dependencies (pick one)
+pip install -e .          # standard pip
+uv pip install -e .       # or uv (faster)
 
-# Run a single task
+# Run your first task
 python -m boss_agent "echo hello from Boss Agent"
+
+# Compound task (auto-decomposed into serial subtasks)
+python -m boss_agent "echo step 1, then echo step 2"
 ```
 
-*Zero config. No API keys needed for shell mode.*
+No API keys needed for shell mode. For LLM-powered decomposition, see below.
 
 ## LLM Mode (v0.2.0)
 
@@ -95,7 +99,7 @@ export BOSS_LLM_MODEL="gpt-4o-mini"
 python -m boss_agent "Research AI agent frameworks and write a comparison report"
 ```
 
-Boss Agent will automatically use LLM mode when `BOSS_LLM_API_KEY` is set. Otherwise it falls back to rule-based mode — zero config needed.
+Boss Agent automatically uses LLM mode when `BOSS_LLM_API_KEY` is set. Otherwise it falls back to rule-based mode.
 
 ## How It Works
 
@@ -108,16 +112,16 @@ Boss decomposes into subtasks
         |
         v
 Boss dispatches each subtask to the best agent
-  +--------------+--------------+--------------+
-  |   Coder      |  Researcher  |    Shell      |
-  | Claude Code  |  Web Search  |  Any command  |
-  +--------------+--------------+--------------+
+  +--------------+--------------+
+  |   Shell      |  (more soon) |
+  | Any command  |  Coder, etc. |
+  +--------------+--------------+
         |
         v
 Boss collects results and delivers
 ```
 
-> **Inspired by Liu Bang** (刘邦), founder of the Han Dynasty: *"I don't fight battles. I find the best people to fight them for me."* He let generals fight, strategists plan, and ministers govern — each doing what they do best.
+> **Inspired by Liu Bang** (刘邦), founder of the Han Dynasty, who famously said he could not fight battles, plan strategy, or govern as well as his top generals, strategists, and ministers — but he could find the best person for each job and let them do it.
 
 ## Architecture
 
@@ -128,21 +132,21 @@ boss_agent/
   llm_decomposer.py    # LLM-powered decomposition (v0.2)
   llm_client.py        # OpenAI-compatible API client (v0.2)
   executor.py          # Agent dispatch
-    ShellExecutor      # Any shell command
-    ClaudeCodeExecutor # Coding tasks via Claude Code
-    ResearchExecutor   # Web research (placeholder)
-    ReviewExecutor     # Code review (placeholder)
+    ShellExecutor        # Any shell command [working]
+    ClaudeCodeExecutor   # Coding via Claude Code [v0.3]
+    ResearchExecutor     # Web research [v0.3]
+    ReviewExecutor       # Code review [v0.3]
 ```
 
 ## Current Status
 
-| Executor | Status | Description |
-|----------|--------|-------------|
+| Component | Status | Description |
+|-----------|--------|-------------|
 | ShellExecutor | ✅ Working | Any shell command |
-| LLM Decomposer | ✅ Working | OpenAI-compatible, auto-fallback to rules |
-| ClaudeCodeExecutor | 🔜 v0.3 | Calls `claude --print` for coding tasks |
+| LLM Decomposer | ✅ Working | OpenAI-compatible, auto-fallback |
+| ClaudeCodeExecutor | 🔜 v0.3 | Coding tasks via Claude Code |
 | ResearchExecutor | 🔜 v0.3 | Web search integration |
-| ReviewExecutor | 🔜 v0.3 | Code review via Claude Code |
+| ReviewExecutor | 🔜 v0.3 | Code review |
 
 ## Roadmap
 
@@ -161,7 +165,10 @@ Built by [Lobster Company](https://github.com/AIwork4me/lobster-company), guided
 
 ## Contributing
 
-PRs welcome! Feel free to open an issue or submit a pull request.
+PRs welcome! Please:
+- Run tests before submitting: `pytest tests/ -v`
+- Keep PRs focused and small
+- Open an issue to discuss major changes first
 
 ## License
 

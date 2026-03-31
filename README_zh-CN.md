@@ -10,11 +10,10 @@
   <img src="https://img.shields.io/badge/version-0.2.0-blue" alt="v0.2.0" />
   <img src="https://img.shields.io/badge/python-3.10+-green" alt="Python 3.10+" />
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License" />
-  <img src="https://img.shields.io/badge/powered%20by-Lobster%20Company-FFD700" alt="Lobster Company" />
 </p>
 
 <p align="center">
-  🦞 由 <a href="https://github.com/AIwork4me/lobster-company">龙虾公司</a> 出品
+  <em>由 <a href="https://github.com/AIwork4me/lobster-company">龙虾公司</a> 出品 🦞</em>
 </p>
 
 [English](README.md)
@@ -25,7 +24,7 @@
 
 你已经有 Claude Code、Cursor、ChatGPT、Copilot、Windsurf、Perplexity……
 
-结果呢？**认知过载。** 在多个 AI 工具之间频繁切换，会让你的前额叶皮层持续疲劳，降低专注力和决策能力。
+结果呢？**认知过载。** 在多个 AI 工具之间频繁切换，会让你的前额叶皮层持续疲劳。工具越多，越累。
 
 你不需要更多工具。**你需要一个 Boss。**
 
@@ -67,18 +66,22 @@ $ python -m boss_agent "echo hello from Boss Agent"
 ## 快速开始
 
 ```bash
-# 克隆并运行（Python 3.10+）
+# 克隆项目（需要 Python 3.10+）
 git clone https://github.com/AIwork4me/boss-agent.git
 cd boss-agent
 
-# 单一任务
+# 安装依赖（二选一）
+pip install -e .          # 标准 pip
+uv pip install -e .       # 或 uv（更快）
+
+# 运行第一个任务
 python -m boss_agent "echo hello from Boss Agent"
 
 # 复合任务（自动拆解为串行子任务）
-python -m boss_agent "echo step 1, 然后 echo step 2"
+python -m boss_agent "echo step 1, then echo step 2"
 ```
 
-*零配置。基础模式不需要 API Key。*
+Shell 模式无需 API Key。LLM 模式见下方。
 
 ## LLM 模式（v0.2.0）
 
@@ -94,7 +97,7 @@ export BOSS_LLM_MODEL="gpt-4o-mini"
 python -m boss_agent "调研 AI Agent 框架并写一份对比报告"
 ```
 
-设置了 `BOSS_LLM_API_KEY` 后自动启用 LLM 模式。没有 API Key 时自动回退到规则模式——零配置即可上手。
+设置了 `BOSS_LLM_API_KEY` 后自动启用 LLM 模式。没有 API Key 时自动回退到规则模式。
 
 ## 工作原理
 
@@ -102,47 +105,41 @@ python -m boss_agent "调研 AI Agent 框架并写一份对比报告"
 用户说一句话
         |
         v
-Boss 拆解为子任务（LLM 或规则引擎）
+Boss 拆解为子任务
+（LLM 智能拆解 或 规则引擎）
         |
         v
 Boss 分派每个子任务给最合适的智能体
-  +--------------+--------------+--------------+
-  |  编码器       |  调研员       |  Shell        |
-  |  Claude Code |  Web Search  |  任意命令     |
-  +--------------+--------------+--------------+
+  +--------------+--------------+
+  |   Shell      |  (更多即将推出) |
+  |  任意命令     |  编码器、调研员  |
+  +--------------+--------------+
         |
         v
 Boss 收集结果并交付
 ```
 
-> **灵感来自刘邦**——汉朝开国皇帝：*"我不擅长打仗，但我擅长找到最合适的人来打仗。* 将军打仗、谋士出策、丞相治国——各司其职。
+> **灵感来自刘邦**——汉朝开国皇帝。他说自己打仗不如韩信、谋略不如张良、治国不如萧何，但他能让每个人做自己最擅长的事。
 
 ## 架构
 
 ```
 boss_agent/
   __main__.py          # CLI 入口
-  decomposer.py        # 规则引擎拆解（Boss 的大脑）
+  decomposer.py        # 规则引擎拆解
   llm_decomposer.py    # LLM 智能拆解（v0.2 新增）
   llm_client.py        # OpenAI 兼容客户端（v0.2 新增）
-  executor.py          # 智能体分派（Boss 的武将）
-    ShellExecutor      # 任意 Shell 命令
-    ClaudeCodeExecutor # 编码任务（v0.3）
-    ResearchExecutor   # Web 调研（v0.3）
-    ReviewExecutor     # 代码审查（v0.3）
+  executor.py          # 智能体分派
+    ShellExecutor        # 任意 Shell 命令 [可用]
+    ClaudeCodeExecutor   # 编码任务 [v0.3]
+    ResearchExecutor     # Web 调研 [v0.3]
+    ReviewExecutor       # 代码审查 [v0.3]
 ```
-
-| 组件 | 角色 | 类比 |
-|------|------|------|
-| `decomposer.py` | 规则拆解 | Boss 的直觉 |
-| `llm_decomposer.py` | 智能拆解 | Boss 的深思熟虑 |
-| `ShellExecutor` | 运行系统命令 | 萧何——丞相 |
-| `ClaudeCodeExecutor` | 执行编码任务 | 韩信——大将军 |
 
 ## 当前状态
 
-| 执行器 | 状态 | 说明 |
-|--------|------|------|
+| 组件 | 状态 | 说明 |
+|------|------|------|
 | ShellExecutor | ✅ 可用 | 任意 Shell 命令 |
 | LLM 拆解器 | ✅ 可用 | OpenAI 兼容，自动降级 |
 | ClaudeCodeExecutor | 🔜 v0.3 | 调用 Claude Code 执行编码任务 |
@@ -166,7 +163,10 @@ boss_agent/
 
 ## 贡献
 
-欢迎 PR！随时可以提 Issue 或提交 Pull Request。
+欢迎 PR！请注意：
+- 提交前跑测试：`pytest tests/ -v`
+- PR 保持聚焦和小规模
+- 大改动请先开 Issue 讨论
 
 ## 许可证
 
