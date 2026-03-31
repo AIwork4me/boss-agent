@@ -84,9 +84,6 @@ def main():
     print("  [Boss] Executing...")
     print("-" * 50)
 
-    for task in plan.subtasks:
-        task.agent = AgentType.SHELL
-
     engine = BossEngine()
     start_time = time.time()
     results = engine.execute_plan(plan)
