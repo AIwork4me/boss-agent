@@ -26,7 +26,9 @@ SYSTEM_PROMPT = (
     "Agent types: coder=coding/debugging, researcher=search/analyze, "
     "shell=system commands, reviewer=code review.\n"
     "Rules: Each subtask atomic. Use dependencies only when needed. "
-    "Default shell if unsure."
+    "Default shell if unsure. Dependencies should use 1-based indices "
+    "referring to the position in the subtasks array (e.g. [1] means "
+    "depends on first subtask)."
 )
 
 _AGENT_MAP = {
@@ -37,35 +39,82 @@ _AGENT_MAP = {
 }
 
 
-def _parse_response(text, original_input):
+def _strip_markdown_fences(text):
+    """Remove markdown code fences from LLM output."""
     text = text.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        for i, line in enumerate(lines):
-            if line.strip().startswith("{"):
-                text = "\n".join(lines[i:])
-                break
-    if text.endswith("```"):
-        text = text[:-3]
-    data = json.loads(text.strip())
+    if not text.startswith("```"):
+        return text
+    lines = text.split("\n")
+    start = 0
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("{"):
+            start = i
+            break
+    else:
+        start = 1
+    end = len(lines)
+    for i in range(len(lines) - 1, -1, -1):
+        if lines[i].strip() == "```":
+            end = i
+            break
+    return "\n".join(lines[start:end])
+
+
+def _parse_response(text, original_input):
+    """Parse LLM JSON response into a TaskPlan.
+
+    Remaps 1-based index dependencies to actual generated IDs.
+    Falls back to single shell task on any parse failure.
+    """
+    text = _strip_markdown_fences(text)
+
+    data = json.loads(text)
+
+    raw_subtasks = data.get("subtasks", [])
+    if not isinstance(raw_subtasks, list) or not raw_subtasks:
+        raise ValueError("subtasks must be a non-empty list")
+
+    # Phase 1: generate IDs and build index-to-ID mapping
     _reset_counter()
+    id_list = []
+    for _ in raw_subtasks:
+        id_list.append(_generate_id())
+
+    # Phase 2: build SubTasks with remapped dependencies
     subtasks = []
-    for item in data.get("subtasks", []):
+    for idx, item in enumerate(raw_subtasks):
+        if not isinstance(item, dict):
+            continue
         agent_str = item.get("agent", "shell").lower()
         agent = _AGENT_MAP.get(agent_str, AgentType.SHELL)
-        deps = item.get("dependencies", [])
+
+        # Remap dependencies: accept 1-based indices or string IDs
+        raw_deps = item.get("dependencies", [])
+        if not isinstance(raw_deps, list):
+            raw_deps = []
+        resolved_deps = []
+        for dep in raw_deps:
+            if isinstance(dep, int) and 1 <= dep <= len(id_list):
+                resolved_deps.append(id_list[dep - 1])
+            elif isinstance(dep, str) and dep in id_list:
+                resolved_deps.append(dep)
+
         subtasks.append(SubTask(
-            id=_generate_id(),
+            id=id_list[idx],
             description=item.get("description", original_input),
             agent=agent,
-            dependencies=deps,
+            dependencies=resolved_deps,
         ))
+
     if not subtasks:
+        _reset_counter()
         subtasks = [SubTask(
             id=_generate_id(),
             description=original_input,
             agent=AgentType.SHELL,
         )]
+
     return TaskPlan(
         original=original_input,
         subtasks=subtasks,
@@ -78,7 +127,6 @@ def decompose_with_llm(user_input, client):
 
     Falls back to rule-based decomposition if LLM fails.
     """
-    _reset_counter()
     messages = [
         LLMMessage(role="system", content=SYSTEM_PROMPT),
         LLMMessage(role="user", content="Decompose this task: " + user_input),
@@ -89,6 +137,6 @@ def decompose_with_llm(user_input, client):
         return rule_decompose(user_input)
     try:
         return _parse_response(response.content, user_input)
-    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         logger.warning("LLM parse error (%s), falling back to rule-based", exc)
         return rule_decompose(user_input)

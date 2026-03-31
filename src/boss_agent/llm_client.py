@@ -1,8 +1,6 @@
-"""
-Boss Agent - LLM 客户端
+"""Boss Agent - LLM Client (v0.2)
 
-支持 OpenAI 兼容 API（OpenAI、DeepSeek、Ollama 等）。
-刘邦不会亲自打每一个电话，但他的信使系统必须可靠。
+OpenAI-compatible API client using only stdlib (no third-party deps).
 """
 
 from __future__ import annotations
@@ -17,7 +15,7 @@ from typing import Optional
 
 @dataclass
 class LLMConfig:
-    """LLM 配置"""
+    """LLM configuration."""
     api_key: str = ""
     base_url: str = "https://api.openai.com/v1"
     model: str = "gpt-4o-mini"
@@ -28,14 +26,14 @@ class LLMConfig:
 
 @dataclass
 class LLMMessage:
-    """一条消息"""
+    """A single message."""
     role: str  # system / user / assistant
     content: str
 
 
 @dataclass
 class LLMResponse:
-    """LLM 响应"""
+    """LLM response."""
     content: str
     model: str = ""
     usage: dict = field(default_factory=dict)
@@ -45,10 +43,10 @@ class LLMResponse:
 
 class LLMClient:
     """
-    LLM 客户端——信使系统
+    LLM Client - the messenger system.
     
-    支持 OpenAI 兼容 API。
-    不依赖任何第三方库，只用标准库的 urllib。
+    Supports OpenAI-compatible APIs.
+    No third-party dependencies - uses only stdlib urllib.
     """
 
     def __init__(self, config: Optional[LLMConfig] = None):
@@ -56,19 +54,31 @@ class LLMClient:
 
     @staticmethod
     def _load_config() -> LLMConfig:
-        """从环境变量加载配置"""
+        """Load config from environment variables with safe parsing."""
+        def _env_float(key: str, default: float) -> float:
+            try:
+                return float(os.environ.get(key, str(default)))
+            except (ValueError, TypeError):
+                return default
+
+        def _env_int(key: str, default: int) -> int:
+            try:
+                return int(os.environ.get(key, str(default)))
+            except (ValueError, TypeError):
+                return default
+
         return LLMConfig(
             api_key=os.environ.get("BOSS_LLM_API_KEY", ""),
             base_url=os.environ.get("BOSS_LLM_BASE_URL", "https://api.openai.com/v1"),
             model=os.environ.get("BOSS_LLM_MODEL", "gpt-4o-mini"),
-            temperature=float(os.environ.get("BOSS_LLM_TEMPERATURE", "0.3")),
-            max_tokens=int(os.environ.get("BOSS_LLM_MAX_TOKENS", "2048")),
-            timeout=int(os.environ.get("BOSS_LLM_TIMEOUT", "30")),
+            temperature=_env_float("BOSS_LLM_TEMPERATURE", 0.3),
+            max_tokens=_env_int("BOSS_LLM_MAX_TOKENS", 2048),
+            timeout=_env_int("BOSS_LLM_TIMEOUT", 30),
         )
 
     @property
     def is_available(self) -> bool:
-        """LLM 是否可用（有 API Key）"""
+        """Check if LLM is available (has API key)."""
         return bool(self.config.api_key)
 
     def chat(
@@ -78,13 +88,13 @@ class LLMClient:
         max_tokens: Optional[int] = None,
     ) -> LLMResponse:
         """
-        发送聊天请求
-        
+        Send a chat request.
+
         Args:
-            messages: 消息列表
-            temperature: 温度（可选，覆盖配置）
-            max_tokens: 最大 token 数（可选，覆盖配置）
-        
+            messages: Message list
+            temperature: Optional temperature override
+            max_tokens: Optional max_tokens override
+
         Returns:
             LLMResponse
         """
@@ -104,8 +114,8 @@ class LLMClient:
         body = {
             "model": self.config.model,
             "messages": [{"role": m.role, "content": m.content} for m in messages],
-            "temperature": temperature or self.config.temperature,
-            "max_tokens": max_tokens or self.config.max_tokens,
+            "temperature": temperature if temperature is not None else self.config.temperature,
+            "max_tokens": max_tokens if max_tokens is not None else self.config.max_tokens,
         }
 
         req = urllib.request.Request(
