@@ -69,39 +69,98 @@ class ShellExecutor:
             )
 
 
-class ClaudeCodeExecutor:
-    """Claude Code executor - the coding specialist.
+class CoderExecutor:
+    """Coding executor - uses LLM API for code generation.
 
-    Uses `claude --print` for coding tasks.
+    Falls back to Claude Code CLI if available, then to shell.
+    Priority: LLM API > Claude Code CLI > shell fallback.
     """
 
     def __init__(self):
         self.claude_path = shutil.which("claude")
+        self._llm_client = None
 
-    def is_available(self) -> bool:
-        return self.claude_path is not None
+    def _get_llm_client(self):
+        """Lazy-init LLM client from environment variables."""
+        if self._llm_client is not None:
+            return self._llm_client
+
+        from .llm_client import LLMClient, LLMConfig
+        import os
+
+        api_key = os.environ.get("BOSS_LLM_API_KEY", "")
+        if not api_key:
+            self._llm_client = False  # sentinel: tried but not available
+            return None
+
+        config = LLMConfig(
+            api_key=api_key,
+            base_url=os.environ.get("BOSS_LLM_BASE_URL", "https://api.openai.com/v1"),
+            model=os.environ.get("BOSS_LLM_MODEL", "gpt-4.1-mini"),
+        )
+        self._llm_client = LLMClient(config)
+        return self._llm_client
 
     def can_handle(self, task: SubTask) -> bool:
         return task.agent == AgentType.CODER
 
     def execute(self, task: SubTask, context: dict | None = None) -> ExecutionResult:
-        if not self.is_available():
-            return ExecutionResult(
-                task_id=task.id,
-                success=False,
-                output="",
-                error="Claude Code not installed. Install: https://docs.anthropic.com/en/docs/claude-code",
-            )
+        # Build prompt with context from previous tasks
+        prompt = self._build_prompt(task, context)
 
-        prompt = task.description
+        # Strategy 1: LLM API (zero local deps, works everywhere)
+        client = self._get_llm_client()
+        if client:
+            return self._execute_via_llm(task, client, prompt)
+
+        # Strategy 2: Claude Code CLI (if installed locally)
+        if self.claude_path:
+            return self._execute_via_cli(task, prompt)
+
+        # Strategy 3: Shell fallback (best effort)
+        return self._execute_via_shell(task, prompt)
+
+    def _build_prompt(self, task: SubTask, context: dict | None) -> str:
+        prompt = (
+            "You are a coding assistant. Generate code to complete this task.\n"
+            "Output ONLY the code, no explanations unless asked.\n\n"
+            f"Task: {task.description}"
+        )
         if context:
-            prev_results = []
+            prev = []
             for dep_id in task.dependencies:
                 if dep_id in context:
-                    prev_results.append(f"[{dep_id} result]:\n{context[dep_id]}")
-            if prev_results:
-                prompt = f"Previous task results:\n{''.join(prev_results)}\n\nNow do: {task.description}"
+                    prev.append(f"[{dep_id}]:\n{context[dep_id]}")
+            if prev:
+                prompt = (
+                    "You are a coding assistant. Previous task results:\n"
+                    + "\n".join(prev)
+                    + f"\n\nNow complete this task: {task.description}\n"
+                    "Output ONLY the code."
+                )
+        return prompt
 
+    def _execute_via_llm(self, task, client, prompt):
+        from .llm_client import LLMMessage
+        messages = [
+            LLMMessage(role="system", content="You are an expert coding assistant. Output clean, working code."),
+            LLMMessage(role="user", content=prompt),
+        ]
+        response = client.chat(messages, temperature=0.2, max_tokens=4096)
+        if response.success:
+            return ExecutionResult(
+                task_id=task.id,
+                success=True,
+                output=response.output if hasattr(response, 'output') else response.content,
+            )
+        return ExecutionResult(
+            task_id=task.id,
+            success=False,
+            output="",
+            error=f"LLM API error: {response.error}",
+        )
+
+    def _execute_via_cli(self, task, prompt):
         try:
             result = subprocess.run(
                 [self.claude_path, "--print", prompt],
@@ -131,6 +190,15 @@ class ClaudeCodeExecutor:
                 output="",
                 error=str(e),
             )
+
+    def _execute_via_shell(self, task, prompt):
+        """Shell fallback: try to run the task description as a command."""
+        return ExecutionResult(
+            task_id=task.id,
+            success=False,
+            output="",
+            error="No LLM API key or Claude Code available. Set BOSS_LLM_API_KEY to enable coding tasks.",
+        )
 
 
 class ResearchExecutor:
@@ -255,34 +323,26 @@ class ResearchExecutor:
 
 
 class ReviewExecutor:
-    """Review executor - uses Claude Code for code review, falls back to shell."""
+    """Review executor - uses CoderExecutor for code review."""
 
     def __init__(self):
-        self._claude = ClaudeCodeExecutor()
+        self._coder = CoderExecutor()
 
     def can_handle(self, task: SubTask) -> bool:
         return task.agent == AgentType.REVIEWER
 
     def execute(self, task: SubTask, context: dict | None = None) -> ExecutionResult:
-        if self._claude.is_available():
-            review_prompt = (
-                f"As a senior code reviewer, review the following and provide "
-                f"specific, actionable feedback:\n\n{task.description}"
-            )
-            review_task = SubTask(
-                id=task.id,
-                description=review_prompt,
-                agent=AgentType.CODER,
-                dependencies=task.dependencies,
-            )
-            return self._claude.execute(review_task, context)
-
-        # Fallback: use shell with a basic check
-        return ExecutionResult(
-            task_id=task.id,
-            success=True,
-            output=f"[Review] Claude Code not available. Task: {task.description}",
+        review_prompt = (
+            f"As a senior code reviewer, review the following and provide "
+            f"specific, actionable feedback:\n\n{task.description}"
         )
+        review_task = SubTask(
+            id=task.id,
+            description=review_prompt,
+            agent=AgentType.CODER,
+            dependencies=task.dependencies,
+        )
+        return self._coder.execute(review_task, context)
 
 
 class BossEngine:
@@ -295,7 +355,7 @@ class BossEngine:
     def __init__(self):
         self.executors = [
             ShellExecutor(),
-            ClaudeCodeExecutor(),
+            CoderExecutor(),
             ResearchExecutor(),
             ReviewExecutor(),
         ]
