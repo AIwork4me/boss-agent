@@ -1,0 +1,10 @@
+[project]
+name = "boss-agent"
+version = "0.1.0"
+description = "You speak, Boss dispatches. An AI agent that orchestrates other agents to get things done."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+boss = "boss_agent.cli:main"
